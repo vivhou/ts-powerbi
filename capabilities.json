@@ -1,0 +1,26 @@
+{
+  "dataRoles": [
+    {
+      "displayName": "Summarize Category",
+      "name": "myCategory",
+      "kind": "Grouping"
+    },
+    {
+      "displayName": "Measure Data",
+      "name": "myMeasure",
+      "kind": "Measure"
+    }
+  ],
+  "dataViewMappings": [
+    {
+      "table": {
+        "rows": {
+          "select": [
+            { "for": { "in": "myCategory" } },
+            { "for": { "in": "myMeasure" } }
+          ]
+        }
+      }
+    }
+  ]
+}
