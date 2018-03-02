@@ -626,7 +626,6 @@ var powerbi;
                         });
                         _this.g.attr('transform', 'translate(' + _this.margin.left + ',' + _this.margin.top + ')');
                         var dat = Visual.converter(options.dataViews[0].table.rows);
-                        console.log(dat);
                         // setup d3 scale
                         var xScale = d3.scale.ordinal()
                             .domain(dat.map(function (d) { return d.category; }))
@@ -649,10 +648,9 @@ var powerbi;
                             .attr('transform', 'translate(0,' + (gHeight - 1) + ')')
                             .call(xAxis)
                             .selectAll('text') // rotate text
-                            .style('text-anchor', 'end')
-                            .attr('dx', '-.8em')
-                            .attr('dy', '-.6em')
-                            .attr('transform', 'rotate(-90)');
+                            .style('text-anchor', 'middle')
+                            .attr('dy', '1.1em')
+                            .attr('transform', 'rotate(0)');
                         // draw y axis
                         var yAxis = d3.svg.axis()
                             .scale(yScale)
@@ -669,7 +667,9 @@ var powerbi;
                             .data(dat);
                         shapes.enter()
                             .append('rect')
-                            .attr('class', 'bar')
+                            .attr('class', function (d, i) {
+                            return 'bar bar-' + i;
+                        })
                             .attr('fill', function (d) {
                             return d.color;
                         })
@@ -678,8 +678,8 @@ var powerbi;
                             return xScale(d.category);
                         })
                             .attr('width', xScale.rangeBand())
-                            .attr('y', function (d) {
-                            return yScale(d.Cost);
+                            .attr('y', function (d, i) {
+                            return (i == 1) ? yScale(dat[0]["Cost"]) : yScale(d.Cost);
                         })
                             .attr('height', function (d) {
                             return gHeight - yScale(d.Cost);
@@ -687,6 +687,47 @@ var powerbi;
                         shapes
                             .exit()
                             .remove();
+                        //draw lines
+                        var lines = _this.g
+                            .append('g')
+                            .selectAll('.line')
+                            .data(dat);
+                        lines
+                            .enter()
+                            .append("line")
+                            .style("stroke", "black")
+                            .style("stroke-width", "1px")
+                            .attr("x1", function (d, i) {
+                            console.log(dat);
+                            return (i == 1) ? (+xScale(dat[1]["category"]) - +xScale(dat[0]["category"])) : 0;
+                        })
+                            .attr("x2", function (d, i) {
+                            return (i == 1) ? xScale(d.category) : 0;
+                        })
+                            .attr("y1", function (d, i) {
+                            return yScale(dat[0]["Cost"]);
+                        })
+                            .attr("y2", function (d, i) {
+                            return yScale(dat[0]["Cost"]);
+                        });
+                        lines
+                            .enter()
+                            .append("line")
+                            .style("stroke", "black")
+                            .style("stroke-width", "1px")
+                            .attr("x1", function (d, i) {
+                            console.log(dat);
+                            return (i == 1) ? xScale(d.category) : 0;
+                        })
+                            .attr("x2", function (d, i) {
+                            return (i == 1) ? xScale(dat[2]["category"]) : 0;
+                        })
+                            .attr("y1", function (d, i) {
+                            return yScale(dat[2]["Cost"]);
+                        })
+                            .attr("y2", function (d, i) {
+                            return yScale(dat[2]["Cost"]);
+                        });
                     };
                     Visual.prototype.destroy = function () {
                     };
@@ -730,17 +771,18 @@ var powerbi;
                         var totalLength = rows.length + 1;
                         for (var i = 0; i < totalLength; i++) {
                             var totalCost = 0;
+                            var difference = 0;
                             if (i == totalLength - 1) {
-                                for (var i = 0; i < 3; i++) {
+                                for (var i = 0; i < totalLength - 1; i++) {
                                     console.log(i);
                                     var eachAmount = (+rows[i][1]);
                                     totalCost = totalCost + eachAmount;
+                                    difference = Math.abs((+rows[0][1]) - +rows[1][1]);
                                 }
-                                console.log(totalCost);
                                 var row = rows[i];
                                 resultData.push({
                                     category: "Total",
-                                    Cost: totalCost,
+                                    Cost: difference,
                                     color: colors[i]
                                 });
                             }
@@ -753,7 +795,10 @@ var powerbi;
                                 });
                             }
                         }
-                        return resultData;
+                        console.log(resultData);
+                        var newArray = [];
+                        console.log(newArray.push(resultData[0], resultData[2], resultData[1]));
+                        return newArray;
                     };
                     return Visual;
                 }());
