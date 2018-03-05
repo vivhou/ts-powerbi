@@ -597,6 +597,8 @@ var powerbi;
                 var Visual = (function () {
                     function Visual(options) {
                         this.margin = { top: 20, right: 20, bottom: 200, left: 70 };
+                        this.host = options.host;
+                        this.selectionManager = options.host.createSelectionManager();
                         var svg = this.svg = d3.select(options.element)
                             .append('svg').classed('liquidFillGauge', true);
                         this.g = this.svg.append('g');
@@ -607,7 +609,7 @@ var powerbi;
                         //     .style("fill", 'green');
                     }
                     Visual.prototype.update = function (options) {
-                        console.log(options);
+                        var viewModel = Visual.converter(options, options.dataViews[0].table.rows, this.host);
                         var _this = this;
                         // get height and width from viewport
                         _this.svg.attr({
@@ -625,12 +627,13 @@ var powerbi;
                             width: gWidth
                         });
                         _this.g.attr('transform', 'translate(' + _this.margin.left + ',' + _this.margin.top + ')');
-                        var dat = Visual.converter(options.dataViews[0].table.rows);
+                        var dat = Visual.converter(options, options.dataViews[0].table.rows, this.host);
+                        console.log(viewModel.dataPoints);
                         // setup d3 scale
                         var xScale = d3.scale.ordinal()
-                            .domain(dat.map(function (d) { return d.category; }))
+                            .domain((viewModel.dataPoints).map(function (d) { return d.category; }))
                             .rangeRoundBands([0, gWidth], 0.1);
-                        var yMax = d3.max(dat, function (d) { return d.Cost + 10; });
+                        var yMax = d3.max(viewModel.dataPoints, function (d) { return d.Cost + 10; });
                         var yScale = d3.scale.linear()
                             .domain([0, yMax])
                             .range([gHeight, 0]);
@@ -664,7 +667,7 @@ var powerbi;
                         var shapes = _this.g
                             .append('g')
                             .selectAll('.bar')
-                            .data(dat);
+                            .data(viewModel.dataPoints);
                         shapes.enter()
                             .append('rect')
                             .attr('class', function (d, i) {
@@ -679,7 +682,8 @@ var powerbi;
                         })
                             .attr('width', xScale.rangeBand())
                             .attr('y', function (d, i) {
-                            return (i == 1) ? yScale(dat[0]["Cost"]) : yScale(d.Cost);
+                            console.log(viewModel.dataPoints[0]);
+                            return (i == 1) ? yScale(viewModel.dataPoints[0]["Cost"]) : yScale(d.Cost);
                         })
                             .attr('height', function (d) {
                             return gHeight - yScale(d.Cost);
@@ -691,24 +695,23 @@ var powerbi;
                         var lines = _this.g
                             .append('g')
                             .selectAll('.line')
-                            .data(dat);
+                            .data(viewModel.dataPoints);
                         lines
                             .enter()
                             .append("line")
                             .style("stroke", "black")
                             .style("stroke-width", "1px")
                             .attr("x1", function (d, i) {
-                            console.log(dat);
-                            return (i == 1) ? (+xScale(dat[1]["category"]) - +xScale(dat[0]["category"])) : 0;
+                            return (i == 1) ? (+xScale(viewModel.dataPoints[1]["category"]) - +xScale(viewModel.dataPoints[0]["category"])) : 0;
                         })
                             .attr("x2", function (d, i) {
                             return (i == 1) ? xScale(d.category) : 0;
                         })
                             .attr("y1", function (d, i) {
-                            return yScale(dat[0]["Cost"]);
+                            return yScale(viewModel.dataPoints[0]["Cost"]);
                         })
                             .attr("y2", function (d, i) {
-                            return yScale(dat[0]["Cost"]);
+                            return yScale(viewModel.dataPoints[0]["Cost"]);
                         });
                         lines
                             .enter()
@@ -716,17 +719,16 @@ var powerbi;
                             .style("stroke", "black")
                             .style("stroke-width", "1px")
                             .attr("x1", function (d, i) {
-                            console.log(dat);
                             return (i == 1) ? xScale(d.category) : 0;
                         })
                             .attr("x2", function (d, i) {
-                            return (i == 1) ? xScale(dat[2]["category"]) : 0;
+                            return (i == 1) ? xScale(viewModel.dataPoints[2]["category"]) : 0;
                         })
                             .attr("y1", function (d, i) {
-                            return yScale(dat[2]["Cost"]);
+                            return yScale(viewModel.dataPoints[2]["Cost"]);
                         })
                             .attr("y2", function (d, i) {
-                            return yScale(dat[2]["Cost"]);
+                            return yScale(viewModel.dataPoints[2]["Cost"]);
                         });
                     };
                     Visual.prototype.destroy = function () {
@@ -765,40 +767,50 @@ var powerbi;
                         ;
                         return testVisual253F2FF14CD634C0A8EB3217BF74C4A12.VisualSettings.enumerateObjectInstances(this.settings || testVisual253F2FF14CD634C0A8EB3217BF74C4A12.VisualSettings.getDefault(), options);
                     };
-                    Visual.converter = function (rows) {
+                    Visual.converter = function (options, rows, host) {
+                        var viewModel = {
+                            dataPoints: [],
+                            dataMax: 0
+                        };
+                        var barChartDataPoints = [];
+                        var dataMax;
                         var colors = ["#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854"];
-                        var resultData = [];
+                        //   var resultData: TestItem[] = [];
                         var totalLength = rows.length + 1;
                         for (var i = 0; i < totalLength; i++) {
                             var totalCost = 0;
                             var difference = 0;
                             if (i == totalLength - 1) {
                                 for (var i = 0; i < totalLength - 1; i++) {
-                                    console.log(i);
                                     var eachAmount = (+rows[i][1]);
                                     totalCost = totalCost + eachAmount;
                                     difference = Math.abs((+rows[0][1]) - +rows[1][1]);
                                 }
                                 var row = rows[i];
-                                resultData.push({
+                                barChartDataPoints.push({
                                     category: "Total",
                                     Cost: difference,
-                                    color: colors[i]
+                                    color: colors[i],
+                                    selectionId: 2
                                 });
                             }
                             else {
                                 var row = rows[i];
-                                resultData.push({
+                                barChartDataPoints.push({
                                     category: String(row[0]),
                                     Cost: +row[1],
-                                    color: colors[i]
+                                    color: colors[i],
+                                    selectionId: 2
                                 });
                             }
+                            dataMax = 10;
                         }
-                        console.log(resultData);
                         var newArray = [];
-                        console.log(newArray.push(resultData[0], resultData[2], resultData[1]));
-                        return newArray;
+                        // return newArray;
+                        return {
+                            dataPoints: barChartDataPoints,
+                            dataMax: dataMax
+                        };
                     };
                     return Visual;
                 }());

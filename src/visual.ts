@@ -10,12 +10,14 @@ module powerbi.extensibility.visual {
         dataPoints: TestItem[];
         dataMax: number;
     };
+    
+
 
     export interface TestItem {
       category: string;
       Cost: number;
       color: string;
-     // selectionId: powerbi.visuals.ISelectionId;
+      selectionId: ISelectionId; //  selectionId: powerbi.visuals.ISelectionId;
     }
 
     /**
@@ -52,11 +54,13 @@ module powerbi.extensibility.visual {
         private svg: d3.Selection<SVGElement>;
         private g: d3.Selection<SVGElement>;
         private host: IVisualHost;
+        private selectionManager: ISelectionManager;
         private margin = { top: 20, right: 20, bottom: 200, left: 70 };
         private barDataPoints: TestItem[];
 
         constructor(options: VisualConstructorOptions) {
-
+            this.host = options.host;
+            this.selectionManager = options.host.createSelectionManager();
             let svg = this.svg = d3.select(options.element)
                 .append('svg').classed('liquidFillGauge', true);
             this.g = this.svg.append('g');
@@ -69,7 +73,7 @@ module powerbi.extensibility.visual {
         }
 
         public update(options: VisualUpdateOptions) {
-            console.log(options)
+            let viewModel: BarChartViewModel = Visual.converter(options, options.dataViews[0].table.rows, this.host)
              var _this = this;
 
                 // get height and width from viewport
@@ -90,14 +94,14 @@ module powerbi.extensibility.visual {
                 _this.g.attr('transform',
                   'translate(' + _this.margin.left + ',' + _this.margin.top + ')');
                  var dat =
-                  Visual.converter(options.dataViews[0].table.rows);
-
+                  Visual.converter(options, options.dataViews[0].table.rows, this.host);
+                  console.log(viewModel.dataPoints)
              // setup d3 scale
                 var xScale = d3.scale.ordinal()
-                  .domain(dat.map(function (d) { return d.category; }))
+                  .domain((viewModel.dataPoints).map(function (d) { return d.category; }))
                   .rangeRoundBands([0, gWidth], 0.1);
                 var yMax =
-                  d3.max(dat, function (d) { return d.Cost + 10 });
+                  d3.max(viewModel.dataPoints, function (d) { return d.Cost + 10 });
                 var yScale = d3.scale.linear()
                   .domain([0, yMax])
                   .range([gHeight, 0]);
@@ -133,7 +137,7 @@ module powerbi.extensibility.visual {
                 var shapes = _this.g
                   .append('g')
                   .selectAll('.bar')
-                  .data(dat);
+                  .data(viewModel.dataPoints);
                 shapes.enter()
                   .append('rect')
                   .attr('class', function(d,i) {
@@ -147,8 +151,8 @@ module powerbi.extensibility.visual {
                     return xScale(d.category);
                   })
                   .attr('width', xScale.rangeBand())
-                  .attr('y', function (d,i) {
-                    return (i==1) ? yScale(dat[0]["Cost"]) : yScale(d.Cost);
+                  .attr('y', function (d,i) {console.log(viewModel.dataPoints[0])
+                    return (i==1) ? yScale(viewModel.dataPoints[0]["Cost"]) : yScale(d.Cost);
                   })
                   .attr('height', function (d) {
                     return gHeight - yScale(d.Cost);
@@ -161,24 +165,23 @@ module powerbi.extensibility.visual {
                 var lines = _this.g
                   .append('g')
                   .selectAll('.line')
-                  .data(dat);
+                  .data(viewModel.dataPoints);
                 lines
                   .enter()
                   .append("line")
                   .style("stroke", "black")
                   .style("stroke-width", "1px")
                   .attr("x1", function(d,i) {
-                    console.log(dat)
-                    return (i==1) ? (+xScale(dat[1]["category"]) - +xScale(dat[0]["category"])) : 0;
+                    return (i==1) ? (+xScale(viewModel.dataPoints[1]["category"]) - +xScale(viewModel.dataPoints[0]["category"])) : 0;
                   })
                   .attr("x2", function(d,i) {
                    return (i==1) ? xScale(d.category) : 0
                   })                  
                   .attr("y1", function(d,i) {
-                   return yScale(dat[0]["Cost"])
+                   return yScale(viewModel.dataPoints[0]["Cost"])
                   })
                   .attr("y2", function(d,i) {
-                   return yScale(dat[0]["Cost"])
+                   return yScale(viewModel.dataPoints[0]["Cost"])
                   })
                 lines
                   .enter()
@@ -186,17 +189,16 @@ module powerbi.extensibility.visual {
                   .style("stroke", "black")
                   .style("stroke-width", "1px")
                   .attr("x1", function(d,i) {
-                    console.log(dat)
                     return (i==1) ? xScale(d.category) : 0;
                   })
                   .attr("x2", function(d,i) {
-                   return (i==1) ? xScale(dat[2]["category"]) : 0
+                   return (i==1) ? xScale(viewModel.dataPoints[2]["category"]) : 0
                   })                  
                   .attr("y1", function(d,i) {
-                   return yScale(dat[2]["Cost"])
+                   return yScale(viewModel.dataPoints[2]["Cost"])
                   })
                   .attr("y2", function(d,i) {
-                   return yScale(dat[2]["Cost"])
+                   return yScale(viewModel.dataPoints[2]["Cost"])
                   })
 
         }
@@ -239,9 +241,15 @@ module powerbi.extensibility.visual {
             };
             return VisualSettings.enumerateObjectInstances(this.settings || VisualSettings.getDefault(), options);
         }
-        public static converter(rows: DataViewTableRow[]): TestItem[] {
+        public static converter(options: VisualUpdateOptions, rows: DataViewTableRow[], host: IVisualHost): BarChartViewModel {
+            let viewModel: BarChartViewModel = {
+              dataPoints: [],
+              dataMax: 0
+            }
+            let barChartDataPoints: TestItem[] = [];
+            let dataMax: number;
             var colors = ["#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854"]
-            var resultData: TestItem[] = [];
+         //   var resultData: TestItem[] = [];
             var totalLength = rows.length + 1
             for (var i = 0;
             i < totalLength ;
@@ -250,37 +258,42 @@ module powerbi.extensibility.visual {
               var difference: number = 0
 
               if (i == totalLength - 1) {
-                for (var i = 0; i < totalLength - 1 ; i++) {console.log(i)
+                for (var i = 0; i < totalLength - 1 ; i++) {
                   var eachAmount: number = (+rows[i][1]);
                   totalCost = totalCost + eachAmount
                   difference = Math.abs((+rows[0][1]) - +rows[1][1])
 
                 }
                 var row = rows[i];
-                resultData.push({
+                barChartDataPoints.push({
                 category: "Total",
                 Cost: difference,
-                color: colors[i]
-                // selectionId: host.createSelectionIdBuilder()
-                //     .withCategory(category, i)
-                //     .createSelectionId()
+                color: colors[i],
+                selectionId: 2
+                // host.createSelectionIdBuilder()
+                //    .withCategory(category, i)
+                //    .createSelectionId()
                 });
               }else {
                 var row = rows[i];
-                resultData.push({
+                barChartDataPoints.push({
                 category: String(row[0]),
                 Cost: +row[1],
-                color: colors[i]
-                // selectionId: host.createSelectionIdBuilder()
-                //     .withCategory(category, i)
-                //     .createSelectionId()
+                color: colors[i],
+                selectionId: 2
+                // host.createSelectionIdBuilder()
+                //    .withCategory(category, i)
+                //    .createSelectionId()
                 });
               }
+              dataMax = 10;
             }
-            console.log(resultData)
             var newArray = []
-            console.log(newArray.push(resultData[0],resultData[2], resultData[1] ))
-            return newArray;
+           // return newArray;
+           return {
+             dataPoints: barChartDataPoints,
+             dataMax: dataMax
+           }
         }
     }
 }
