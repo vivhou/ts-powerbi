@@ -585,15 +585,6 @@ var powerbi;
             var testVisual253F2FF14CD634C0A8EB3217BF74C4A12;
             (function (testVisual253F2FF14CD634C0A8EB3217BF74C4A12) {
                 ;
-                /**
-                 * Function that converts queried data into a view model that will be used by the visual.
-                 *
-                 * @function
-                 * @param {VisualUpdateOptions} options - Contains references to the size of the container
-                 *                                        and the dataView which contains all the data
-                 *                                        the visual had queried.
-                 * @param {IVisualHost} host            - Contains references to the host which contains services
-                 */
                 var Visual = (function () {
                     function Visual(options) {
                         this.margin = { top: 20, right: 20, bottom: 200, left: 70 };
@@ -602,6 +593,7 @@ var powerbi;
                         var svg = this.svg = d3.select(options.element)
                             .append('svg').classed('liquidFillGauge', true);
                         this.g = this.svg.append('g');
+                        this.locale = options.host.locale;
                         // this.g.append("circle")
                         //     .attr("cx", 50)
                         //     .attr("cy", 50)
@@ -611,6 +603,10 @@ var powerbi;
                     Visual.prototype.update = function (options) {
                         var viewModel = Visual.converter(options, options.dataViews[0].table.rows, this.host);
                         var _this = this;
+                        this.barDataPoints = viewModel.dataPoints;
+                        var newArray = [];
+                        newArray.push(viewModel.dataPoints[0], viewModel.dataPoints[2], viewModel.dataPoints[1]);
+                        viewModel.dataPoints = newArray;
                         // get height and width from viewport
                         _this.svg.attr({
                             height: options.viewport.height,
@@ -628,7 +624,6 @@ var powerbi;
                         });
                         _this.g.attr('transform', 'translate(' + _this.margin.left + ',' + _this.margin.top + ')');
                         var dat = Visual.converter(options, options.dataViews[0].table.rows, this.host);
-                        console.log(viewModel.dataPoints);
                         // setup d3 scale
                         var xScale = d3.scale.ordinal()
                             .domain((viewModel.dataPoints).map(function (d) { return d.category; }))
@@ -682,11 +677,27 @@ var powerbi;
                         })
                             .attr('width', xScale.rangeBand())
                             .attr('y', function (d, i) {
-                            console.log(viewModel.dataPoints[0]);
                             return (i == 1) ? yScale(viewModel.dataPoints[0]["Cost"]) : yScale(d.Cost);
                         })
                             .attr('height', function (d) {
                             return gHeight - yScale(d.Cost);
+                        });
+                        var selectionManager = this.selectionManager;
+                        var allowInteractions = this.host.allowInteractions;
+                        shapes.on('click', function (d) {
+                            var _this = this;
+                            console.log(d.selectionId);
+                            if (allowInteractions) {
+                                selectionManager.select(d.selectionId).then(function (ids) {
+                                    shapes.attr({
+                                        'fill-opacity': ids.length > 0 ? .3 : 1
+                                    });
+                                    d3.select(_this).attr({
+                                        'fill-opacity': 1
+                                    });
+                                });
+                                d3.event.stopPropagation();
+                            }
                         });
                         shapes
                             .exit()
@@ -743,44 +754,115 @@ var powerbi;
                      * Below is a code snippet for a case where you want to expose a single property called "lineColor" from the object called "settings"
                      * This object and property should be first defined in the capabilities.json file in the objects section.
                      */
+                    /**
+                     * Enumerates through the objects defined in the capabilities and adds the properties to the format pane
+                     *
+                     * @function
+                     * @param {EnumerateVisualObjectInstancesOptions} options - Map of defined objects
+                     */
                     Visual.prototype.enumerateObjectInstances = function (options) {
                         var objectName = options.objectName;
                         var objectEnumeration = [];
                         switch (objectName) {
+                            case 'generalView':
+                                for (var _i = 0, _a = this.barDataPoints; _i < _a.length; _i++) {
+                                    var barDataPoint = _a[_i];
+                                    objectEnumeration.push({
+                                        objectName: objectName,
+                                        properties: {
+                                            opacity: 1,
+                                            showHelpLink: false //this.barChartSettings.generalView.showHelpLink
+                                        },
+                                        validValues: {
+                                            opacity: {
+                                                numberRange: {
+                                                    min: 10,
+                                                    max: 100
+                                                }
+                                            }
+                                        },
+                                        selector: null
+                                    });
+                                }
                             case 'colorSelector':
-                                // for (let barDataPoint of this.barDataPoints) {
-                                //     objectEnumeration.push({
-                                //         objectName: objectName,
-                                //         displayName: barDataPoint.category,
-                                //         properties: {
-                                //             fill: {
-                                //                 solid: {
-                                //                     color: barDataPoint.color
-                                //                 }
-                                //             }
-                                //         },
-                                //         selector: barDataPoint.selectionId.getSelector()
-                                //     });
-                                // }
+                                for (var _b = 0, _c = this.barDataPoints; _b < _c.length; _b++) {
+                                    var barDataPoint = _c[_b];
+                                    objectEnumeration.push({
+                                        objectName: objectName,
+                                        displayName: barDataPoint.category,
+                                        properties: {
+                                            fill: {
+                                                solid: {
+                                                    color: barDataPoint.color
+                                                }
+                                            }
+                                        },
+                                        selector: barDataPoint.selectionId.getSelector()
+                                    });
+                                }
                                 break;
                         }
                         ;
                         return testVisual253F2FF14CD634C0A8EB3217BF74C4A12.VisualSettings.enumerateObjectInstances(this.settings || testVisual253F2FF14CD634C0A8EB3217BF74C4A12.VisualSettings.getDefault(), options);
                     };
+                    /**
+                     * Function that converts queried data into a view model that will be used by the visual.
+                     *
+                     * @function
+                     * @param {VisualUpdateOptions} options - Contains references to the size of the container
+                     *                                        and the dataView which contains all the data
+                     *                                        the visual had queried.
+                     * @param {IVisualHost} host            - Contains references to the host which contains services
+                     */
                     Visual.converter = function (options, rows, host) {
+                        var dataViews = options.dataViews;
+                        var defaultSettings = {
+                            enableAxis: {
+                                show: false,
+                            },
+                            generalView: {
+                                opacity: 100,
+                                showHelpLink: false
+                            }
+                        };
                         var viewModel = {
                             dataPoints: [],
-                            dataMax: 0
+                            dataMax: 0,
+                            settings: {}
                         };
+                        // if (!dataViews
+                        //   || !dataViews[0]
+                        //   || !dataViews[0].categorical
+                        //   || !dataViews[0].categorical.categories
+                        //   || !dataViews[0].categorical.categories[0].source
+                        //   || !dataViews[0].categorical.values)
+                        //   return viewModel
+                        var categorical = dataViews[0].categorical;
+                        console.log(categorical);
+                        var category = categorical.categories[0];
+                        // let category = dataViews[0].metadata.columns;
+                        var dataValue = categorical.values[0];
                         var barChartDataPoints = [];
                         var dataMax;
                         var colors = ["#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854"];
+                        var colorPalette = host.colorPalette;
+                        var objects = dataViews[0].metadata.objects;
+                        console.log(dataViews[0].metadata);
                         //   var resultData: TestItem[] = [];
+                        var barChartSettings = {
+                            enableAxis: {
+                                show: false,
+                            },
+                            generalView: {
+                                opacity: 100,
+                                showHelpLink: false,
+                            }
+                        };
                         var totalLength = rows.length + 1;
                         for (var i = 0; i < totalLength; i++) {
                             var totalCost = 0;
                             var difference = 0;
-                            if (i == totalLength - 1) {
+                            if (i == (totalLength - 1)) {
                                 for (var i = 0; i < totalLength - 1; i++) {
                                     var eachAmount = (+rows[i][1]);
                                     totalCost = totalCost + eachAmount;
@@ -791,25 +873,29 @@ var powerbi;
                                     category: "Total",
                                     Cost: difference,
                                     color: colors[i],
-                                    selectionId: 2
+                                    selectionId: host.createSelectionIdBuilder()
+                                        .withCategory(category, i)
+                                        .createSelectionId()
                                 });
                             }
                             else {
                                 var row = rows[i];
                                 barChartDataPoints.push({
-                                    category: String(row[0]),
-                                    Cost: +row[1],
+                                    category: String(category.values[i]),
+                                    Cost: +dataValue.values[i],
                                     color: colors[i],
-                                    selectionId: 2
+                                    selectionId: host.createSelectionIdBuilder()
+                                        .withCategory(category, i)
+                                        .createSelectionId()
                                 });
                             }
-                            dataMax = 10;
+                            dataMax = dataValue.maxLocal;
                         }
-                        var newArray = [];
                         // return newArray;
                         return {
                             dataPoints: barChartDataPoints,
-                            dataMax: dataMax
+                            dataMax: dataMax,
+                            settings: barChartSettings,
                         };
                     };
                     return Visual;
